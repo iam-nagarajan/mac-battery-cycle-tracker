@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mac Battery Cycle Tracker</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .header {
+            text-align: center;
+            color: white;
+            margin-bottom: 30px;
+        }
+
+        .header h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            font-size: 1.1rem;
+            opacity: 0.9;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .stat-card {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 12px;
+            padding: 20px;
+            text-align: center;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .stat-card h3 {
+            color: #333;
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 10px;
+        }
+
+        .stat-card .value {
+            font-size: 2rem;
+            font-weight: bold;
+            color: #667eea;
+            margin-bottom: 5px;
+        }
+
+        .stat-card .unit {
+            color: #666;
+            font-size: 0.9rem;
+        }
+
+        .chart-container {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .chart-container h2 {
+            color: #333;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+
+        .controls {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        .btn {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 1rem;
+            margin: 0 10px;
+            transition: all 0.3s ease;
+        }
+
+        .btn:hover {
+            background: #5a6fd8;
+            transform: translateY(-2px);
+        }
+
+        .btn:active {
+            transform: translateY(0);
+        }
+
+        .btn-outline {
+            background: transparent;
+            border: 2px solid #667eea;
+            color: #667eea;
+        }
+
+        .btn-outline:hover {
+            background: #667eea;
+            color: white;
+        }
+
+        select {
+            padding: 8px 12px;
+            border-radius: 6px;
+            border: 1px solid #ddd;
+            margin: 0 10px;
+            font-size: 1rem;
+        }
+
+        .loading {
+            text-align: center;
+            color: #666;
+            padding: 40px;
+        }
+
+        .error {
+            background: #ff6b6b;
+            color: white;
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+            margin: 20px 0;
+        }
+
+        .success {
+            background: #51cf66;
+            color: white;
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+            margin: 20px 0;
+        }
+
+        .footer {
+            text-align: center;
+            color: rgba(255, 255, 255, 0.8);
+            margin-top: 40px;
+            font-size: 0.9rem;
+        }
+
+        @media (max-width: 768px) {
+            .header h1 {
+                font-size: 2rem;
+            }
+            
+            .stats-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .btn {
+                margin: 5px;
+                padding: 10px 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🔋 Mac Battery Cycle Tracker</h1>
+            <p>Monitor your MacBook's battery health and cycle count over time</p>
+        </div>
+
+        <div id="message"></div>
+
+        <div class="stats-grid">
+            <div class="stat-card">
+                <h3>Current Cycle Count</h3>
+                <div class="value" id="current-cycles">--</div>
+                <div class="unit">cycles</div>
+            </div>
+            <div class="stat-card">
+                <h3>Battery Health</h3>
+                <div class="value" id="battery-health">--</div>
+                <div class="unit">%</div>
+            </div>
+            <div class="stat-card">
+                <h3>Condition</h3>
+                <div class="value" id="battery-condition" style="font-size: 1.5rem;">--</div>
+                <div class="unit">status</div>
+            </div>
+            <div class="stat-card">
+                <h3>Total Records</h3>
+                <div class="value" id="total-records">--</div>
+                <div class="unit">entries</div>
+            </div>
+        </div>
+
+        <div class="controls">
+            <button class="btn" onclick="recordBatteryCycle()">📊 Record Now</button>
+            <button class="btn btn-outline" onclick="refreshData()">🔄 Refresh</button>
+            
+            <select id="timeRange" onchange="loadHistory()">
+                <option value="7">Last 7 days</option>
+                <option value="30" selected>Last 30 days</option>
+                <option value="90">Last 90 days</option>
+                <option value="180">Last 6 months</option>
+                <option value="365">Last year</option>
+            </select>
+        </div>
+
+        <div class="chart-container">
+            <h2>Battery Cycle Count Trend</h2>
+            <canvas id="cycleChart" width="400" height="200"></canvas>
+        </div>
+
+        <div class="chart-container">
+            <h2>Battery Health Over Time</h2>
+            <canvas id="healthChart" width="400" height="200"></canvas>
+        </div>
+
+        <div class="footer">
+            <p>Battery Cycle Tracker - Monitor your Mac's battery health with precision</p>
+        </div>
+    </div>
+
+    <script>
+        let cycleChart = null;
+        let healthChart = null;
+
+        function showMessage(message, type = 'info') {
+            const messageDiv = document.getElementById('message');
+            messageDiv.className = type;
+            messageDiv.textContent = message;
+            messageDiv.style.display = 'block';
+            
+            setTimeout(() => {
+                messageDiv.style.display = 'none';
+            }, 3000);
+        }
+
+        async function fetchAPI(endpoint, options = {}) {
+            try {
+                const response = await fetch(endpoint, options);
+                const data = await response.json();
+                
+                if (!data.success) {
+                    throw new Error(data.error || 'API request failed');
+                }
+                
+                return data;
+            } catch (error) {
+                console.error('API Error:', error);
+                showMessage(`Error: ${error.message}`, 'error');
+                throw error;
+            }
+        }
+
+        async function loadCurrentStatus() {
+            try {
+                const data = await fetchAPI('/api/current');
+                const batteryInfo = data.data;
+                
+                document.getElementById('current-cycles').textContent = batteryInfo.cycle_count || '--';
+                document.getElementById('battery-health').textContent = 
+                    batteryInfo.health_percentage ? batteryInfo.health_percentage.toFixed(1) : '--';
+                document.getElementById('battery-condition').textContent = 
+                    batteryInfo.battery_condition || '--';
+            } catch (error) {
+                // Error already handled in fetchAPI
+            }
+        }
+
+        async function loadStats() {
+            try {
+                const data = await fetchAPI('/api/stats');
+                const stats = data.data;
+                
+                document.getElementById('total-records').textContent = stats.total_records || '--';
+            } catch (error) {
+                // Error already handled in fetchAPI
+            }
+        }
+
+        async function loadHistory() {
+            const timeRange = document.getElementById('timeRange').value;
+            
+            try {
+                const data = await fetchAPI(`/api/history?days=${timeRange}`);
+                const history = data.data;
+                
+                updateCharts(history);
+            } catch (error) {
+                // Error already handled in fetchAPI
+            }
+        }
+
+        function updateCharts(history) {
+            const labels = history.map(record => {
+                const date = new Date(record.timestamp);
+                return date.toLocaleDateString();
+            });
+            
+            const cycleData = history.map(record => record.cycle_count);
+            const healthData = history.map(record => record.health_percentage).filter(h => h !== null);
+            const healthLabels = history.filter(record => record.health_percentage !== null)
+                                         .map(record => new Date(record.timestamp).toLocaleDateString());
+
+            // Update cycle count chart
+            if (cycleChart) {
+                cycleChart.destroy();
+            }
+            
+            const cycleCtx = document.getElementById('cycleChart').getContext('2d');
+            cycleChart = new Chart(cycleCtx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Cycle Count',
+                        data: cycleData,
+                        borderColor: '#667eea',
+                        backgroundColor: 'rgba(102, 126, 234, 0.1)',
+                        borderWidth: 3,
+                        fill: true,
+                        tension: 0.4,
+                        pointBackgroundColor: '#667eea',
+                        pointBorderColor: '#fff',
+                        pointBorderWidth: 2,
+                        pointRadius: 5
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: {
+                            display: false
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: false,
+                            grid: {
+                                color: 'rgba(0, 0, 0, 0.1)'
+                            }
+                        },
+                        x: {
+                            grid: {
+                                color: 'rgba(0, 0, 0, 0.1)'
+                            }
+                        }
+                    }
+                }
+            });
+
+            // Update health chart
+            if (healthChart) {
+                healthChart.destroy();
+            }
+            
+            if (healthData.length > 0) {
+                const healthCtx = document.getElementById('healthChart').getContext('2d');
+                healthChart = new Chart(healthCtx, {
+                    type: 'line',
+                    data: {
+                        labels: healthLabels,
+                        datasets: [{
+                            label: 'Battery Health (%)',
+                            data: healthData,
+                            borderColor: '#51cf66',
+                            backgroundColor: 'rgba(81, 207, 102, 0.1)',
+                            borderWidth: 3,
+                            fill: true,
+                            tension: 0.4,
+                            pointBackgroundColor: '#51cf66',
+                            pointBorderColor: '#fff',
+                            pointBorderWidth: 2,
+                            pointRadius: 5
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        plugins: {
+                            legend: {
+                                display: false
+                            }
+                        },
+                        scales: {
+                            y: {
+                                beginAtZero: false,
+                                max: 100,
+                                grid: {
+                                    color: 'rgba(0, 0, 0, 0.1)'
+                                }
+                            },
+                            x: {
+                                grid: {
+                                    color: 'rgba(0, 0, 0, 0.1)'
+                                }
+                            }
+                        }
+                    }
+                });
+            }
+        }
+
+        async function recordBatteryCycle() {
+            try {
+                const data = await fetchAPI('/api/record', {
+                    method: 'POST'
+                });
+                
+                showMessage(data.message, 'success');
+                await refreshData();
+            } catch (error) {
+                // Error already handled in fetchAPI
+            }
+        }
+
+        async function refreshData() {
+            await Promise.all([
+                loadCurrentStatus(),
+                loadStats(),
+                loadHistory()
+            ]);
+        }
+
+        // Initialize the dashboard
+        document.addEventListener('DOMContentLoaded', function() {
+            refreshData();
+            
+            // Auto-refresh every 5 minutes
+            setInterval(refreshData, 5 * 60 * 1000);
+        });
+    </script>
+</body>
+</html>
