@@ -58,12 +58,12 @@ def api_history():
     """API endpoint to get battery cycle history."""
     try:
         days = request.args.get('days', 30, type=int)
-        
+
         # Limit days to reasonable range
         days = max(1, min(days, 365))
-        
+
         history = tracker.get_battery_history(days)
-        
+
         return jsonify({
             'success': True,
             'data': history,
@@ -81,7 +81,7 @@ def api_record():
     """API endpoint to record current battery cycle."""
     try:
         success = tracker.record_battery_cycle()
-        
+
         if success:
             return jsonify({
                 'success': True,
@@ -103,13 +103,18 @@ def api_record():
 def api_stats():
     """API endpoint to get battery statistics."""
     try:
+        days = request.args.get('days', 30, type=int)
+
+        # Limit days to reasonable range
+        days = max(1, min(days, 365))
+
         conn = sqlite3.connect(tracker.db_path, detect_types=sqlite3.PARSE_DECLTYPES | sqlite3.PARSE_COLNAMES)
         cursor = conn.cursor()
-        
+
         # Get total records
         cursor.execute("SELECT COUNT(*) FROM battery_cycles")
         total_records = cursor.fetchone()[0]
-        
+
         # Get first and last record
         cursor.execute("""
             SELECT MIN(timestamp), MAX(timestamp), 
@@ -117,7 +122,7 @@ def api_stats():
             FROM battery_cycles
         """)
         first_timestamp, last_timestamp, min_cycles, max_cycles = cursor.fetchone()
-        
+
         # Get average cycles per day if we have enough data
         cycles_per_day = 0
         if first_timestamp and last_timestamp and min_cycles and max_cycles:
@@ -128,10 +133,10 @@ def api_stats():
                 start_date = datetime.fromisoformat(first_timestamp.replace('Z', '+00:00'))
                 end_date = datetime.fromisoformat(last_timestamp.replace('Z', '+00:00'))
             days_diff = (end_date - start_date).days
-            
+
             if days_diff > 0:
                 cycles_per_day = (max_cycles - min_cycles) / days_diff
-        
+
         # Get recent trend (last 7 days)
         cursor.execute("""
             SELECT cycle_count, timestamp FROM battery_cycles 
@@ -139,7 +144,7 @@ def api_stats():
             ORDER BY timestamp ASC
         """)
         recent_data = cursor.fetchall()
-        
+
         trend = "stable"
         if len(recent_data) >= 2:
             first_recent = recent_data[0][0]
@@ -148,9 +153,65 @@ def api_stats():
                 trend = "increasing"
             elif last_recent < first_recent:
                 trend = "decreasing"
-        
+
+        # Calculate days between cycle count increments (filtered by time range)
+        cursor.execute("""
+            SELECT timestamp, cycle_count 
+            FROM battery_cycles 
+            WHERE timestamp >= datetime('now', '-{} days')
+            ORDER BY timestamp ASC
+        """.format(days))
+        all_records = cursor.fetchall()
+
+        days_between_increments = []
+        prev_cycle = None
+        prev_timestamp = None
+
+        for record in all_records:
+            record_timestamp = record[0]
+            record_cycle = record[1]
+
+            # Convert timestamp to datetime if needed
+            if not isinstance(record_timestamp, datetime):
+                if isinstance(record_timestamp, str):
+                    try:
+                        record_timestamp = datetime.fromisoformat(record_timestamp.replace('Z', '+00:00'))
+                    except:
+                        continue
+                else:
+                    continue
+
+            if prev_cycle is not None:
+                if record_cycle > prev_cycle:
+                    # Cycle count has increased - calculate days since first occurrence of previous cycle count
+                    if prev_timestamp and isinstance(prev_timestamp, datetime):
+                        days_diff = (record_timestamp - prev_timestamp).total_seconds() / 86400.0
+                        days_between_increments.append(days_diff)
+                    # Update to new cycle count and timestamp (first occurrence of new cycle count)
+                    prev_cycle = record_cycle
+                    prev_timestamp = record_timestamp
+                elif record_cycle < prev_cycle:
+                    # Cycle count decreased (shouldn't happen, but handle it)
+                    prev_cycle = record_cycle
+                    prev_timestamp = record_timestamp
+                # If record_cycle == prev_cycle, don't update - keep prev_timestamp pointing to first occurrence
+            else:
+                # First record - initialize
+                prev_cycle = record_cycle
+                prev_timestamp = record_timestamp
+
+        # Calculate statistics
+        avg_days = None
+        max_days = None
+        min_days = None
+
+        if days_between_increments:
+            avg_days = sum(days_between_increments) / len(days_between_increments)
+            max_days = max(days_between_increments)
+            min_days = min(days_between_increments)
+
         conn.close()
-        
+
         stats = {
             'total_records': total_records,
             'first_record': first_timestamp.isoformat() if isinstance(first_timestamp, datetime) else first_timestamp,
@@ -158,14 +219,18 @@ def api_stats():
             'min_cycle_count': min_cycles,
             'max_cycle_count': max_cycles,
             'cycles_per_day': round(cycles_per_day, 2),
-            'recent_trend': trend
+            'recent_trend': trend,
+            'avg_days_per_cycle': round(avg_days, 2) if avg_days is not None else None,
+            'max_days_per_cycle': round(max_days, 2) if max_days is not None else None,
+            'min_days_per_cycle': round(min_days, 2) if min_days is not None else None
         }
-        
+
         return jsonify({
             'success': True,
-            'data': stats
+            'data': stats,
+            'days': days
         })
-        
+
     except Exception as e:
         return jsonify({
             'success': False,
@@ -195,7 +260,7 @@ if __name__ == '__main__':
     # Create templates directory if it doesn't exist
     templates_dir = Path('templates')
     templates_dir.mkdir(exist_ok=True)
-    
+
     print("Starting Battery Cycle Tracker Web Server...")
     print("Access the dashboard at: http://localhost:5000")
     print("API endpoints available at:")
@@ -203,5 +268,5 @@ if __name__ == '__main__':
     print("  GET /api/history?days=30 - Battery history")
     print("  POST /api/record - Record current cycle")
     print("  GET /api/stats - Battery statistics")
-    
+
     app.run(debug=False, host='0.0.0.0', port=5000)

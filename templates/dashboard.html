@@ -173,11 +173,11 @@
             .header h1 {
                 font-size: 2rem;
             }
-            
+
             .stats-grid {
                 grid-template-columns: 1fr;
             }
-            
+
             .btn {
                 margin: 5px;
                 padding: 10px 20px;
@@ -217,11 +217,29 @@
             </div>
         </div>
 
+        <div class="stats-grid">
+            <div class="stat-card">
+                <h3>Average Days per Cycle</h3>
+                <div class="value" id="avg-days-per-cycle">--</div>
+                <div class="unit">days</div>
+            </div>
+            <div class="stat-card">
+                <h3>Max Days per Cycle</h3>
+                <div class="value" id="max-days-per-cycle">--</div>
+                <div class="unit">days</div>
+            </div>
+            <div class="stat-card">
+                <h3>Min Days per Cycle</h3>
+                <div class="value" id="min-days-per-cycle">--</div>
+                <div class="unit">days</div>
+            </div>
+        </div>
+
         <div class="controls">
             <button class="btn" onclick="recordBatteryCycle()">📊 Record Now</button>
             <button class="btn btn-outline" onclick="refreshData()">🔄 Refresh</button>
-            
-            <select id="timeRange" onchange="loadHistory()">
+
+            <select id="timeRange" onchange="onTimeRangeChange()">
                 <option value="7">Last 7 days</option>
                 <option value="30" selected>Last 30 days</option>
                 <option value="90">Last 90 days</option>
@@ -254,7 +272,7 @@
             messageDiv.className = type;
             messageDiv.textContent = message;
             messageDiv.style.display = 'block';
-            
+
             setTimeout(() => {
                 messageDiv.style.display = 'none';
             }, 3000);
@@ -264,11 +282,11 @@
             try {
                 const response = await fetch(endpoint, options);
                 const data = await response.json();
-                
+
                 if (!data.success) {
                     throw new Error(data.error || 'API request failed');
                 }
-                
+
                 return data;
             } catch (error) {
                 console.error('API Error:', error);
@@ -281,7 +299,7 @@
             try {
                 const data = await fetchAPI('/api/current');
                 const batteryInfo = data.data;
-                
+
                 document.getElementById('current-cycles').textContent = batteryInfo.cycle_count || '--';
                 document.getElementById('battery-health').textContent = 
                     batteryInfo.health_percentage ? batteryInfo.health_percentage.toFixed(1) : '--';
@@ -293,11 +311,24 @@
         }
 
         async function loadStats() {
+            const timeRange = document.getElementById('timeRange').value;
+
             try {
-                const data = await fetchAPI('/api/stats');
+                const data = await fetchAPI(`/api/stats?days=${timeRange}`);
                 const stats = data.data;
-                
+
                 document.getElementById('total-records').textContent = stats.total_records || '--';
+
+                // Update cycle increment statistics
+                document.getElementById('avg-days-per-cycle').textContent =
+                    stats.avg_days_per_cycle !== null && stats.avg_days_per_cycle !== undefined 
+                        ? stats.avg_days_per_cycle.toFixed(1) : '--';
+                document.getElementById('max-days-per-cycle').textContent =
+                    stats.max_days_per_cycle !== null && stats.max_days_per_cycle !== undefined 
+                        ? stats.max_days_per_cycle.toFixed(1) : '--';
+                document.getElementById('min-days-per-cycle').textContent =
+                    stats.min_days_per_cycle !== null && stats.min_days_per_cycle !== undefined 
+                        ? stats.min_days_per_cycle.toFixed(1) : '--';
             } catch (error) {
                 // Error already handled in fetchAPI
             }
@@ -305,15 +336,22 @@
 
         async function loadHistory() {
             const timeRange = document.getElementById('timeRange').value;
-            
+
             try {
                 const data = await fetchAPI(`/api/history?days=${timeRange}`);
                 const history = data.data;
-                
+
                 updateCharts(history);
             } catch (error) {
                 // Error already handled in fetchAPI
             }
+        }
+
+        async function onTimeRangeChange() {
+            await Promise.all([
+                loadHistory(),
+                loadStats()
+            ]);
         }
 
         function updateCharts(history) {
@@ -321,7 +359,7 @@
                 const date = new Date(record.timestamp);
                 return date.toLocaleDateString();
             });
-            
+
             const cycleData = history.map(record => record.cycle_count);
             const healthData = history.map(record => record.health_percentage).filter(h => h !== null);
             const healthLabels = history.filter(record => record.health_percentage !== null)
@@ -331,7 +369,7 @@
             if (cycleChart) {
                 cycleChart.destroy();
             }
-            
+
             const cycleCtx = document.getElementById('cycleChart').getContext('2d');
             cycleChart = new Chart(cycleCtx, {
                 type: 'line',
@@ -378,7 +416,7 @@
             if (healthChart) {
                 healthChart.destroy();
             }
-            
+
             if (healthData.length > 0) {
                 const healthCtx = document.getElementById('healthChart').getContext('2d');
                 healthChart = new Chart(healthCtx, {
@@ -408,7 +446,7 @@
                         },
                         scales: {
                             y: {
-                                beginAtZero: false,
+                                beginAtZero: true,
                                 max: 100,
                                 grid: {
                                     color: 'rgba(0, 0, 0, 0.1)'
@@ -430,7 +468,7 @@
                 const data = await fetchAPI('/api/record', {
                     method: 'POST'
                 });
-                
+
                 showMessage(data.message, 'success');
                 await refreshData();
             } catch (error) {
@@ -449,7 +487,7 @@
         // Initialize the dashboard
         document.addEventListener('DOMContentLoaded', function() {
             refreshData();
-            
+
             // Auto-refresh every 5 minutes
             setInterval(refreshData, 5 * 60 * 1000);
         });
