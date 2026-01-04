@@ -220,18 +220,15 @@
         <div class="stats-grid">
             <div class="stat-card">
                 <h3>Average Days per Cycle</h3>
-                <div class="value" id="avg-days-per-cycle">--</div>
-                <div class="unit">days</div>
+                <div class="value" id="avg-days-per-cycle" style="font-size: 1.4rem; line-height: 1.3;">--</div>
             </div>
             <div class="stat-card">
                 <h3>Max Days per Cycle</h3>
-                <div class="value" id="max-days-per-cycle">--</div>
-                <div class="unit">days</div>
+                <div class="value" id="max-days-per-cycle" style="font-size: 1.4rem; line-height: 1.3;">--</div>
             </div>
             <div class="stat-card">
                 <h3>Min Days per Cycle</h3>
-                <div class="value" id="min-days-per-cycle">--</div>
-                <div class="unit">days</div>
+                <div class="value" id="min-days-per-cycle" style="font-size: 1.4rem; line-height: 1.3;">--</div>
             </div>
         </div>
 
@@ -310,6 +307,25 @@
             }
         }
 
+        function formatDaysToDuration(days) {
+            if (days === null || days === undefined) {
+                return '--';
+            }
+
+            const wholeDays = Math.floor(days);
+            const hours = Math.floor((days - wholeDays) * 24);
+
+            if (wholeDays === 0 && hours === 0) {
+                return '0 days 0 hours';
+            } else if (wholeDays === 0) {
+                return `${hours} hour${hours !== 1 ? 's' : ''}`;
+            } else if (hours === 0) {
+                return `${wholeDays} day${wholeDays !== 1 ? 's' : ''}`;
+            } else {
+                return `${wholeDays} day${wholeDays !== 1 ? 's' : ''} ${hours} hour${hours !== 1 ? 's' : ''}`;
+            }
+        }
+
         async function loadStats() {
             const timeRange = document.getElementById('timeRange').value;
 
@@ -319,16 +335,13 @@
 
                 document.getElementById('total-records').textContent = stats.total_records || '--';
 
-                // Update cycle increment statistics
+                // Update cycle increment statistics with formatted duration
                 document.getElementById('avg-days-per-cycle').textContent =
-                    stats.avg_days_per_cycle !== null && stats.avg_days_per_cycle !== undefined 
-                        ? stats.avg_days_per_cycle.toFixed(1) : '--';
+                    formatDaysToDuration(stats.avg_days_per_cycle);
                 document.getElementById('max-days-per-cycle').textContent =
-                    stats.max_days_per_cycle !== null && stats.max_days_per_cycle !== undefined 
-                        ? stats.max_days_per_cycle.toFixed(1) : '--';
+                    formatDaysToDuration(stats.max_days_per_cycle);
                 document.getElementById('min-days-per-cycle').textContent =
-                    stats.min_days_per_cycle !== null && stats.min_days_per_cycle !== undefined 
-                        ? stats.min_days_per_cycle.toFixed(1) : '--';
+                    formatDaysToDuration(stats.min_days_per_cycle);
             } catch (error) {
                 // Error already handled in fetchAPI
             }
